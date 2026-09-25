@@ -1,0 +1,35 @@
+{
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b13b0f-1a9e-4a6c-94cc-bb15286ca111",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [ 250, 300 ]
+    },
+    {
+      "parameters": {},
+      "id": "b1b13b0f-1a9e-4a6c-94cc-bb15286ca222",
+      "name": "Notify Dev Team",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [ 500, 300 ],
+      "notesInFlow": true,
+      "notes": "Replace this with Slack/Email node. Error template provided in code."
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Notify Dev Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

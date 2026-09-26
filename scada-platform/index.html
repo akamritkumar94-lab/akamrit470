@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Industrial Command Center</title>
+<link rel="stylesheet" href="assets/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='4' fill='%232ecc71'/></svg>">
+</head>
+<body>
+
+<!-- login overlay (demo) -->
+<div class="login-wrap" id="login">
+  <div class="login-card">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div class="brand"><div class="logo">IC</div></div>
+      <div><h1>Industrial command center</h1><div class="sub">SCADA · IIoT · Plant operations</div></div>
+    </div>
+    <div class="field"><label>Username</label><input type="text" id="uName" value="operator"></div>
+    <div class="field"><label>Password</label><input type="text" id="uPass" value="demo1234"></div>
+    <button class="btn primary" style="width:100%;padding:9px" onclick="doLogin()">Sign in</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:12px;text-align:center">Demo build — authentication is simulated. Production uses JWT + RBAC.</div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <header class="topbar">
+    <div class="brand"><div class="logo">IC</div><div><b>Industrial command center</b><small>SCADA · IIoT · plant operations</small></div></div>
+    <span class="demo-badge">Demo · simulated data</span>
+    <div class="spacer"></div>
+    <select id="plantSel"><option>Plant 01 — Pune</option><option>Plant 02 — Chennai</option></select>
+    <select id="lineSel"><option>All lines</option><option>Line 1 — Machining</option><option>Line 2 — Assembly</option></select>
+    <span class="hstat"><span class="dot" style="background:var(--green)" id="mqttDot"></span><span class="lbl">MQTT</span></span>
+    <span class="hstat"><span class="dot" style="background:var(--green)" id="dbDot"></span><span class="lbl">DB</span></span>
+    <button class="bell" onclick="location.hash='#/alarms'">🔔<span class="n tnum" id="bellN">0</span></button>
+    <span class="hstat"><span class="dot" style="background:var(--red)" id="alarmDot"></span><span class="lbl">alarms: <b class="tnum" id="almCount">0</b> · critical <b class="tnum" id="critN">0</b></span></span>
+    <span class="clock" id="clock">--</span>
+    <div class="user"><div class="avatar">OP</div><span>A. Sharma · Plant Manager</span></div>
+  </header>
+
+  <aside class="sidebar" id="nav"></aside>
+  <main id="view"></main>
+</div>
+
+<script src="assets/app-core.js"></script>
+<script src="assets/views.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* nav + boot */
+document.getElementById('nav').innerHTML=NAV.map(([g,items])=>
+  `<div class="navgrp">${g}</div>`+items.map(([v,l,c])=>
+  `<button class="navitem" data-v="${v}" onclick="location.hash='#/${v}'"><span class="dot" style="background:${c}"></span><span class="txt">${l}</span></button>`).join('')).join('');
+
+function doLogin(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='grid';
+  if(!location.hash)location.hash='#/overview';
+  route();
+}
+/* seed 15 min of history so charts open alive */
+(function(){
+  const m=MACHINES[0];
+  for(let k=900;k>=1;k--){
+    const t=new Date(Date.now()-k*1000);
+    hist.temp.push({t,v:72+Math.sin(k/90)*6+Math.sin(k/9)*3+rnd(-1,1)});
+    hist.press.push({t,v:6.1+Math.sin(k/70)*0.5+rnd(-0.08,0.08)});
+    hist.rpm.push({t,v:2380+Math.sin(k/50)*120+rnd(-40,40)});
+    hist.vib.push({t,v:1.8+Math.sin(k/30)*0.5+rnd(-0.1,0.1)});
+    hist.energy.push({t,v:4820-k*0.14+rnd(-0.4,0.4)});
+    hist.prod.push({t,v:Math.max(0,12450-k*1.4)});
+  }
+  raiseAlarm(MACHINES[6],'Temperature','96.2 °C','95 °C','CRITICAL');
+  raiseAlarm(MACHINES[2],'State change','idle','—','INFO');
+  ALARMS.forEach(a=>{if(a.sev==='INFO'){a.status='ACKNOWLEDGED';a.ackBy='A. Sharma';a.ackT=new Date()}});
+  setInterval(()=>{const e=document.getElementById('mps');if(e)e.textContent=230+Math.floor(rnd(0,40))},2000);
+  /* occasional broker blip to exercise status UI */
+  setInterval(()=>{if(Math.random()<0.06){const d=document.getElementById('mqttDot');d.style.background='var(--yellow)';setTimeout(()=>d.style.background='var(--green)',2500)}},8000);
+})();
+document.getElementById('uPass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+
+/* ==========================================
+   SUPABASE REAL-TIME CONNECTION
+   ========================================== */
+const SUPABASE_URL = 'https://xpmglyigcjayzxloafad.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwbWdseWlnY2pheXp4bG9hZmFkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4NTIzNjMsImV4cCI6MjEwNTQyODM2M30.wPHZ5gwh2smRGOR1XIRRE5aFB-h__6NFnPzaxb7LOG0';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+console.log("Connecting to Supabase Realtime...");
+
+// 1. Listen for new Alarms from n8n
+supabaseClient.channel('public:alarms')
+  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alarms' }, payload => {
+    console.log('Real alarm received!', payload.new);
+    const m = MACHINES.find(x => x.id === payload.new.machine_id) || MACHINES[0];
+    ALARMS.unshift({
+      id: 'ALM-' + payload.new.id,
+      t: new Date(payload.new.created_at),
+      m: m.id,
+      param: payload.new.parameter || 'Sensor',
+      val: payload.new.value || 0,
+      thr: payload.new.threshold || 0,
+      sev: payload.new.severity || 'CRITICAL',
+      status: 'ACTIVE',
+      ackBy: null, ackT: null, res: null
+    });
+    flash(`REAL ALARM: ${payload.new.severity} from ${m.id}`);
+    renderView();
+  }).subscribe();
+
+// 2. Listen for Real Sensor Readings
+supabaseClient.channel('public:sensor_readings')
+  .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_readings' }, payload => {
+    const m = MACHINES.find(x => x.id === payload.new.machine_id);
+    if(m && payload.new.parameter === 'temperature') {
+      m.temp = payload.new.value;
+      hist.temp.push({t: new Date(), v: m.temp});
+      if(hist.temp.length > 1800) hist.temp.shift();
+      pushHist();
+    }
+  }).subscribe();
+
+</script>
+</body>
+</html>
